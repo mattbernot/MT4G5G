@@ -3,6 +3,7 @@ import { useState } from "react";
 function App() {
   const [showCategory1, setShowCategory1] = useState(true);
   const [showCategory2, setShowCategory2] = useState(true);
+  const [showCategory3, setShowCategory3] = useState(true);
 
   return (
     <div
@@ -97,11 +98,11 @@ function App() {
               cursor: "pointer",
               textAlign: "left"
             }}
-            onClick={() => setShowCategory2(!showCategory2)}
+            onClick={() => setShowCategory3(!showCategory3)}
           >
-            Obdobje {showCategory2 ? "▲" : "▼"}
+            Obdobje {showCategory3? "▲" : "▼"}
           </button>
-          {showCategory2 && (
+          {showCategory3 && (
             <div style={{ paddingLeft: "10px", marginTop: "5px" }}>
               <label><input type="checkbox" /> 2025</label><br />
               <label><input type="checkbox" /> 2024</label><br />
