@@ -1,9 +1,21 @@
 import { useState } from "react";
+import Slider from "@mui/material/Slider";
+import Box from "@mui/material/Box";
 
 function App() {
   const [showCategory1, setShowCategory1] = useState(true);
   const [showCategory2, setShowCategory2] = useState(true);
   const [showCategory3, setShowCategory3] = useState(true);
+
+const obdobja = ['2025_Q1','2024_Q4','2024_Q1','2023_Q2','2023_Q1','2022_Q3','2021_Q2','2020_Q2','2019_Q3','2019_Q1','2018_Q1',];
+const marks = obdobja.map((label, index) => ({
+  value: index,
+  label,
+}));
+
+function valuetext(val) {
+    return `${val}`;
+  }
 
   return (
     <div
@@ -85,7 +97,6 @@ function App() {
 
 
 
-
                 {/*Obdobje */}
         <div>
           <button
@@ -104,14 +115,33 @@ function App() {
           </button>
           {showCategory3 && (
             <div style={{ paddingLeft: "10px", marginTop: "5px" }}>
-              <label><input type="checkbox" /> 2025</label><br />
-              <label><input type="checkbox" /> 2024</label><br />
-              <label><input type="checkbox" /> 2023</label><br />
-              <label><input type="checkbox" /> 2022</label><br />
-              <label><input type="checkbox" /> 2021</label><br />
-              <label><input type="checkbox" /> 2020</label><br />
-              <label><input type="checkbox" /> 2019</label><br />
-              <label><input type="checkbox" /> 2018</label><br />
+
+
+          <Slider
+        valueLabelDisplay="auto"
+        valueLabelFormat={(v) => obdobja[v]}
+        aria-label="Obdobja"
+        defaultValue={0}
+        min={0}
+        max={obdobja.length - 1}
+        step={1}
+        marks={marks}
+        sx={{
+          width: 240,
+          marginTop: "10px",
+          "& .MuiSlider-thumb": {
+            width: 18,
+            height: 18,
+            backgroundColor: "#1976d2",
+          },
+          "& .MuiSlider-markLabel": {
+            fontSize: "0.5rem",
+            transform: "rotate(-20deg)",
+            marginLeft: -2,
+            whiteSpace: "normal",
+          }
+        }}
+      />
             </div>
           )}
         </div>
