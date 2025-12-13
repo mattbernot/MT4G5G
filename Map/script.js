@@ -21,12 +21,12 @@ L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
     '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
 }).addTo(map);
 
-
+let sloveniaCoords;
 
 fetch('https://nominatim.openstreetmap.org/search?country=si&polygon_geojson=1&format=json')
   .then(res => res.json())
   .then(data => {
-    const sloveniaCoords = data[0].geojson.coordinates;
+    sloveniaCoords = data[0].geojson.coordinates;
 
     const invertedPolygon = {
       type: 'Polygon',
@@ -45,6 +45,8 @@ fetch('https://nominatim.openstreetmap.org/search?country=si&polygon_geojson=1&f
       interactive: false
     }).addTo(map);
   });
+
+  console.log(sloveniaCoords);
 
 
 /*
@@ -104,3 +106,27 @@ function getCoords(e) {
 
 */
 
+function rnd(){
+ var ranNum = (Math.random()*(0.4-0) + 0) * (Math.round(Math.random()) ? 1 : -1);
+ return ranNum;
+}
+
+
+const tower = L.icon({
+  iconUrl: "./tower.png",
+  iconSize: [50, 58], // size of the icon
+  //iconAnchor: [20, 58], // changed marker icon position
+});
+
+
+for (let i = 0; i < 10; i++) {
+  const [lt, lg, popupText] = [lat+rnd(),lng+rnd(), `Stolp ${i}`]
+
+  L.marker([lt, lg], {
+  icon: tower,
+})
+  .bindPopup(popupText)
+  .addTo(map);
+
+  //marker = new L.marker([lt, lg]).bindPopup(popupText).addTo(map);
+}
