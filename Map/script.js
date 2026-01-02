@@ -182,7 +182,20 @@ function removeAllAnimationClassFromMap() {
 
 
 
+////      Connect towers        ////
 
+const line = [
+  [points[0].lat, points[0].lng],
+  [points[1].lat, points[1].lng],
+];
+
+// add polyline to map
+L.polyline(line, {
+  color: "black",
+  opacity: 0.7,
+  weight: 2,
+})
+  .addTo(map);
 
 
 ////      Get Coordinates on click        ////
