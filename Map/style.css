@@ -418,3 +418,13 @@ li.loupe:before {
   border-radius: 50%;
   animation: border-pulse 1.5s infinite;
 }
+
+
+.marker-position {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  z-index: 999;
+  padding: 5px;
+  background-color: #fff;
+}
