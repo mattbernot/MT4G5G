@@ -504,6 +504,8 @@ const autocomplete = new Autocomplete("marker", {
       }
     });
 
+    /*
+
     // add marker
     const marker = L.marker([cord[1], cord[0]], {
       title: display_name,
@@ -511,12 +513,13 @@ const autocomplete = new Autocomplete("marker", {
 
     // add marker to map
     marker.addTo(map).bindPopup(display_name);
-
+    */
+  
     // set marker to coordinates
-    map.setView([cord[1], cord[0]], 8);
+    map.setView([cord[1], cord[0]], 15);
 
     // add class to marker
-    L.DomUtil.addClass(marker._icon, "leaflet-marker-locate");
+    //L.DomUtil.addClass(marker._icon, "leaflet-marker-locate");
   },
 
   // the method presents no results
