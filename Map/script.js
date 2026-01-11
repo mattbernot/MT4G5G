@@ -105,6 +105,7 @@ async function loadAndUseData() {
       lat: record.lat_a,
       lng: record.long_a,
       owner: record.ow_name,
+      id: record.mw_name,
       text: `<h3>${record.mw_name}</h3>
              <b>Imetnik:</b> ${record.ow_name}<br>
              <b>Širina rf kanala BW/KHz:</b> ${record.bw_khz}<br>
@@ -125,9 +126,18 @@ async function loadAndUseData() {
     //console.log(points);
     const color = stringToColor(points[0].owner);
 
+
+   
+  //const distance = map.distance([from_lat,from_long], [to_lat,to_long]).toFixed(0);
+
+  let markers = L.markerClusterGroup();
+
+  for (let i = 0; i < points.length; i++) {
+
+    
     const newIcon = L.divIcon({
-      className: "marker",
-      html: svgIcon.replace('fill="originalColor"', `fill="#731818ff"`),
+      className: `"${points[i].id}"`,
+      html: svgIcon.replace('fill="originalColor"', `fill="#000000"`),
       // html: svgIcon.replace('fill="originalColor"', `fill="${color}"`),
       iconSize: [30, 30],
       iconAnchor: [12, 24],
@@ -135,28 +145,34 @@ async function loadAndUseData() {
       
     });
 
-      points.map(({ lat, lng, text }) => {
-      // create marker and add to map
-      var marker = L.marker([lat, lng], {
-        
-        icon: newIcon,
-        
-      }).addTo(map);
 
-      // create popup, set contnet
-      const popup = L.popup({
-        pane: "fixed",
-        className: "popup-fixed test",
-        autoPan: false,
-      }).setContent(text);
+    var marker = L.marker([points[i].lat, points[i].lng], {
+      
+      icon: newIcon,
+      
+    });
 
-  marker.bindPopup(popup).on("click", fitBoundsPadding);
-});
+    const popup = L.popup({
+      pane: "fixed",
+      className: "popup-fixed test",
+      autoPan: false,
+    }).setContent(points[i].text);
 
+    marker.bindPopup(popup).on("click", fitBoundsPadding);
+
+
+    markers.addLayer(marker);
+}
+
+map.addLayer(markers);
+
+
+/*
 // remove all animation class when popupclose
 map.on("popupclose", function (e) {
   removeAllAnimationClassFromMap();
 });
+*/
 
 const line = [
   [points[0].lat, points[0].lng],
@@ -170,25 +186,8 @@ L.polyline(line, {
   weight: 2,
 })
   .addTo(map);
-    
-    
-  } catch (err) {
-    console.error('Error loading data:', err);
-  }
-}
 
-
-loadAndUseData();
-
-//console.log(points);
-
-
-
-
-
-// ------------------------------------------------
-
-const mediaQueryList = window.matchMedia("(min-width: 700px)");
+  const mediaQueryList = window.matchMedia("(min-width: 700px)");
 
 mediaQueryList.addEventListener("change", (event) => onMediaQueryChange(event));
 
@@ -234,8 +233,27 @@ function removeAllAnimationClassFromMap() {
   });
 
   // back to default position
-  map.setView([lat, lng], zoom);
+  //map.setView([lat, lng], zoom);
 }
+
+
+    
+    
+  } catch (err) {
+    console.error('Error loading data:', err);
+  }
+}
+
+
+loadAndUseData();
+
+//console.log(points);
+
+
+
+
+
+// ------------------------------------------------
 
 
 
@@ -530,7 +548,7 @@ function getName(feature, layer) {
 }
 
 // adding geojson by fetch
-fetch("si.json")
+fetch("../static/si.json")
   .then(function (response) {
     return response.json();
   })
