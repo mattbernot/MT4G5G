@@ -89,6 +89,10 @@ function stringToColor(str) {
   return COLORS[Math.abs(hash) % COLORS.length];
 }
 
+function placedCoordinates(coordinates){
+  console.log("Lat:", coordinates.lat);
+  console.log("Lng:", coordinates.lng);
+}
 
 
 let points = [];
@@ -583,3 +587,46 @@ fetch("../static/si.json")
         });
 
   });
+
+
+  // Drow polygon, circle, rectangle, polyline
+// --------------------------------------------------
+
+let drawnItems = L.featureGroup().addTo(map);
+
+map.addControl(
+  new L.Control.Draw({
+    edit: {
+      featureGroup: drawnItems,
+      poly: {
+        allowIntersection: false,
+      },
+    },
+    draw: {
+      polyline: false,
+      polygon: false,
+      rectangle: false,
+      circle: false,
+      marker: true,
+      circlemarker: false,
+      
+    },
+  })
+);
+
+map.on(L.Draw.Event.CREATED, function (event) {
+  let layer = event.layer;
+  let feature = (layer.feature = layer.feature || {});
+  let type = event.layerType;
+
+  feature.type = feature.type || "Feature";
+  let props = (feature.properties = feature.properties || {});
+
+  props.type = type;
+
+  if (type === "circle") {
+    props.radius = layer.getRadius();
+  }
+
+  drawnItems.addLayer(layer);
+});
