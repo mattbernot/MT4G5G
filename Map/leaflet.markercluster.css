@@ -1,0 +1,28 @@
+/* MarkerCluster core styles */
+.leaflet-cluster-anim .leaflet-marker-icon,
+.leaflet-cluster-anim .leaflet-marker-shadow {
+  transition: transform 0.3s ease-out, opacity 0.3s ease-in;
+}
+
+/* Outer wrapper of the cluster icon */
+.leaflet-marker-cluster {
+  border-radius: 999px !important;
+}
+
+/* Inner bubble */
+.leaflet-marker-cluster div {
+  width: 36px;
+  height: 36px;
+  margin: 0 !important;            /* important: remove the 5px offset */
+  display: flex;                   /* center perfectly */
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px !important; /* make it a perfect circle */
+  font: 12px "Helvetica Neue", Arial, Helvetica, sans-serif;
+}
+
+/* number */
+.leaflet-marker-cluster span {
+  line-height: 1 !important;       /* don't rely on line-height trick */
+  font-weight: 700;
+}

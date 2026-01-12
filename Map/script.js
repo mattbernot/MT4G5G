@@ -9,12 +9,210 @@ let config = {
   maxZoom: 18,
 };
 
+
+const DEFAULT_USER_BW = 28000; 
+
+let operatorCoverageLayers = new Map();   
+let operatorCoverageByBW = new Map();     
+
+// BW filter state
+let selectedBWStop = null;
+
+
+let operatorMarkersByBW = new Map();
+
+
+
+let operatorData = new Map();
+
+
+let enabledOperators = new Set();   
+
+
+
+// ===== LINKS (A <-> B) =====
+const linksLayer = L.layerGroup();   // holds all polylines
+let linksControl = null;             // Leaflet layers control (optional)
+
+
+
+
 const zoom = 9;
 const lat = 46.1512;
 const lng = 14.9955;
 
 // calling map
 const map = L.map("map", config).setView([lat, lng], zoom);
+
+
+
+
+// ca voergae
+let coverageEnabled = true;
+
+function setCoverageEnabled(enabled) {
+  coverageEnabled = enabled;
+
+  operatorCoverageLayers.forEach((lg) => {
+    if (enabled) lg.addTo(map);
+    else lg.remove();
+  });
+
+  // if turning back on, redrawam BW
+  if (enabled) {
+    const bw = activeBWStop ?? BW_STOPS[0];
+    applyBWFilterToCoverage(bw);
+  }
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+//za towejre
+let towersEnabled = true; // ✅ new
+
+function setCoverageEnabled(enabled) {
+  coverageEnabled = enabled;
+
+  operatorCoverageLayers.forEach((lg) => {
+    if (enabled) lg.addTo(map);
+    else lg.remove();
+  });
+
+  if (enabled) {
+    const bw = activeBWStop ?? BW_STOPS[0];
+    applyBWFilterToCoverage(bw);
+  }
+}
+
+function setTowersEnabled(enabled) {
+  towersEnabled = enabled;
+
+  operatorLayers.forEach((lg) => {
+    if (enabled) lg.addTo(map);
+    else lg.remove();
+  });
+
+  // when turning towers back on, re-apply BW so only correct points show
+  if (enabled) {
+    const bw = activeBWStop ?? BW_STOPS[0];
+    applyBWFilterToClusters(bw);
+  }
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+// A layer group where drawn items will be stored za shranjevanje.
+const drawnItems = new L.FeatureGroup();
+map.addLayer(drawnItems);
+
+// Add draw controls
+map.addControl(new L.Control.Draw({
+  position: "topleft",
+  draw: {
+    polyline: true,
+    polygon: true,
+    rectangle: true,
+    circle: true,
+    marker: true
+  },
+  edit: {
+    featureGroup: drawnItems,
+    remove: true
+  }
+}));
+
+// When something is drawn, add it to the map
+map.on(L.Draw.Event.CREATED, function (event) {
+  let layer = event.layer;
+  let feature = (layer.feature = layer.feature || {});
+  let type = event.layerType;
+
+  feature.type = feature.type || "Feature";
+  let props = (feature.properties = feature.properties || {});
+
+  props.type = type;
+
+  if (type === "circle") {
+    props.radius = layer.getRadius();
+  }
+
+  drawnItems.addLayer(layer);
+});
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 fetch('https://nominatim.openstreetmap.org/search?country=si&polygon_geojson=1&format=json')
@@ -74,7 +272,336 @@ const svgIcon = `
 
 */
 
-const COLORS = ['red', 'blue', 'green', 'purple', 'orange', 'yellow', 'pink'];
+
+
+
+
+
+
+
+
+
+
+// ----------------------------
+// Color helper (REQUIRED for coverage)
+// ----------------------------
+function hexToRgba(hex, alpha = 1) {
+  // fallback if invalid input
+  if (typeof hex !== "string") return `rgba(0, 150, 255, ${alpha})`;
+
+  let h = hex.trim().replace("#", "");
+
+  // support rgb/rgba already
+  if (hex.startsWith("rgb(") || hex.startsWith("rgba(")) return hex;
+
+  // support short hex (#abc)
+  if (h.length === 3) {
+    h = h.split("").map(c => c + c).join("");
+  }
+
+  // must be 6 hex chars
+  if (!/^[0-9a-fA-F]{6}$/.test(h)) {
+    return `rgba(0, 150, 255, ${alpha})`; // fallback blue-ish
+  }
+
+  const r = parseInt(h.slice(0, 2), 16);
+  const g = parseInt(h.slice(2, 4), 16);
+  const b = parseInt(h.slice(4, 6), 16);
+
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
+
+
+
+function colorFromString(str) {
+  // deterministic hash -> color
+  let hash = 0;
+  const s = String(str ?? "");
+  for (let i = 0; i < s.length; i++) {
+    hash = ((hash << 5) - hash) + s.charCodeAt(i);
+    hash |= 0;
+  }
+
+  // make positive
+  hash = Math.abs(hash);
+
+  // pick RGB bytes from hash
+  const r = (hash & 0xff0000) >> 16;
+  const g = (hash & 0x00ff00) >> 8;
+  const b = (hash & 0x0000ff);
+
+  // ensure it isn't too dark
+  const rr = Math.max(60, r);
+  const gg = Math.max(60, g);
+  const bb = Math.max(60, b);
+
+  return (
+    "#" +
+    rr.toString(16).padStart(2, "0") +
+    gg.toString(16).padStart(2, "0") +
+    bb.toString(16).padStart(2, "0")
+  );
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+// ----------------------------
+// COVERAGE helper functions (based on your NDJSON fields)
+// ----------------------------
+function toNum(x) {
+  const n = Number(x);
+  return Number.isFinite(n) ? n : null;
+}
+
+function normDeg0_360(deg) {
+  // normalize degrees to [0, 360)
+  let d = deg % 360;
+  if (d < 0) d += 360;
+  return d;
+}
+
+function haversineMeters(lat1, lon1, lat2, lon2) {
+  const R = 6371000;
+  const toRad = d => (d * Math.PI) / 180;
+  const dLat = toRad(lat2 - lat1);
+  const dLon = toRad(lon2 - lon1);
+
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) ** 2;
+
+  return 2 * R * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+function beamwidthDeg(r, side /* "a"|"b" */) {
+  // Your data: ant1_bw_a / ant1_bw_b are degrees but very small (1.00–2.70)
+  const raw = toNum(side === "b" ? r?.ant1_bw_b : r?.ant1_bw_a);
+
+  // If missing, choose a visible default
+if (raw === null) {
+  return 20 + Math.random() * (200 - 20);
+}
+
+  // Make it visible on the map:
+  // - multiply small BW so you can actually see it
+  // - clamp to a reasonable min/max
+  const scaled = raw * 10;          // 1.5° -> 15° (visible)
+  const minDeg = 8;                 // don’t go too thin
+  const maxDeg = 70;                // don’t fill the whole map
+
+  return Math.min(maxDeg, Math.max(minDeg, scaled));
+}
+
+function azimuthDeg(r, side /* "a"|"b" */) {
+  // Your data: ant1_azimut_a / ant1_azimut_b are strings like "333.00"
+  const raw = toNum(side === "b" ? r?.ant1_azimut_b : r?.ant1_azimut_a);
+  if (raw === null) return null;
+  return normDeg0_360(raw);
+}
+
+function linkRadiusMeters(r) {
+  // Best radius = distance A <-> B
+  const hasA = typeof r?.lat_a === "number" && typeof r?.long_a === "number";
+  const hasB = typeof r?.lat_b === "number" && typeof r?.long_b === "number";
+
+  if (hasA && hasB) {
+    const d = haversineMeters(r.lat_a, r.long_a, r.lat_b, r.long_b);
+    if (!Number.isFinite(d) || d <= 0) return null;
+    return d * 1.05; // small overshoot
+  }
+
+  // If B missing, fallback to a "random base" style rule using bw_khz:
+  // (you asked it's okay to use a random/base if needed)
+  const bw = Number(r?.bw_khz);
+  if (!Number.isFinite(bw)) return 3000; // 3km default fallback
+  // crude fallback: bigger BW -> slightly bigger radius
+  return Math.min(25000, Math.max(2000, bw / 5)); // clamp 2km..25km
+}
+
+function makeCoverageSector(r, side /* "a"|"b" */, colorHex) {
+  const lat = side === "b" ? r.lat_b : r.lat_a;
+  const lng = side === "b" ? r.long_b : r.long_a;
+  if (typeof lat !== "number" || typeof lng !== "number") return null;
+
+  const az = azimuthDeg(r, side);
+  if (az === null) return null;
+
+  const bw = beamwidthDeg(r, side);
+  const radius = linkRadiusMeters(r);
+  if (radius === null) return null;
+
+  // sectorLatLngs() is already in your script and returns [center, ...arc..., center]
+  const latlngs = sectorLatLngs(lat, lng, radius, az, bw, 28);
+
+return L.polygon(latlngs, {
+  color: colorHex,
+  weight: 1,
+  opacity: 0.35,
+
+  fillColor: colorHex,
+  fillOpacity: 0.18,
+
+  interactive: false
+});
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+// ================================
+// BW SLIDER (snapping + filtering)
+// ================================
+
+// Your 15 points (duplicates allowed)
+const BW_POINTS = [
+  500,
+  28000, 28000,
+  55000, 55000,
+  56000, 56000, 56000, 56000, 56000,
+  110000,
+  112000, 112000,
+  250000,
+  500000
+];
+
+// Unique sorted stops (duplicates removed)
+const BW_STOPS = Array.from(new Set(BW_POINTS)).sort((a, b) => a - b);
+
+// Build stop positions on a log scale mapped into 0..1000
+function buildStopPositions(stops) {
+  const logMin = Math.log10(stops[0]);
+  const logMax = Math.log10(stops[stops.length - 1]);
+  return stops.map(v => {
+    const t = (Math.log10(v) - logMin) / (logMax - logMin);
+    return Math.round(t * 1000);
+  });
+}
+
+const BW_STOP_POS = buildStopPositions(BW_STOPS);
+
+// Snap a slider value (0..1000) to nearest stop index/value/pos
+function snapToBWStop(sliderVal) {
+  let bestIdx = 0;
+  let bestDist = Infinity;
+
+  for (let i = 0; i < BW_STOP_POS.length; i++) {
+    const d = Math.abs(BW_STOP_POS[i] - sliderVal);
+    if (d < bestDist) {
+      bestDist = d;
+      bestIdx = i;
+    }
+  }
+
+  return { idx: bestIdx, value: BW_STOPS[bestIdx], pos: BW_STOP_POS[bestIdx] };
+}
+
+// Map any bw value to the nearest stop (used for "closest value" behavior)
+function nearestBWStopValue(bw) {
+  if (typeof bw !== "number") return null;
+
+  let best = BW_STOPS[0];
+  let bestDist = Infinity;
+
+  for (const s of BW_STOPS) {
+    const d = Math.abs(s - bw);
+    if (d < bestDist) {
+      bestDist = d;
+      best = s;
+    }
+  }
+
+  return best;
+}
+
+function filterByBWStop(selectedStop) {
+  activeBWStop = selectedStop;
+
+  if (typeof operatorLayers !== "undefined" && operatorLayers?.size > 0) {
+    operatorLayers.forEach(layerGroup => {
+      layerGroup.eachLayer(layer => {
+        // markerji imajo _bw, coverage (krogi/polygoni) nimajo -> ignoriraj ali dodaj logiko kasneje
+        if (layer instanceof L.Marker) {
+          const mStop = nearestBWStopValue(Number(layer._bw));
+          const show = (mStop === selectedStop);
+
+          layer.setOpacity(show ? 1 : 0);
+
+          // če želiš še bolj “hard hide”, lahko:
+          // const el = layer.getElement();
+          // if (el) el.style.display = show ? "" : "none";
+        }
+      });
+    });
+    return;
+  }
+
+  console.warn("No operatorLayers found. Filtering skipped.");
+}
+
+let activeBWStop = BW_STOPS[0];
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+const COLORS = ['red', 'blue', 'green', 'purple', 'orange', 'teal', 'pink'];
 
 function getFirstWord(str) {
   return str.split('')[0] || str;
@@ -91,96 +618,604 @@ function stringToColor(str) {
 
 
 
+
+function normalizeOperator(name) {
+  const s = (name || "").toLowerCase();
+
+  if (s.includes("a1")) return "A1";
+  if (s.includes("telemach")) return "Telemach";
+  if (s.includes("telekom")) return "Telekom Slovenije";
+  if (s.includes("t-2") || s.includes("t2")) return "T-2";
+
+  // fallback: keep the original, but trimmed
+  return (name || "Unknown").trim();
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+// ZA PRIJAZ 
+
+function metersToLatLngOffset(lat, metersNorth, metersEast) {
+  const dLat = metersNorth / 111320;
+  const dLng = metersEast / (111320 * Math.cos((lat * Math.PI) / 180));
+  return [dLat, dLng];
+}
+
+function sectorLatLngs(centerLat, centerLng, radiusMeters, azimuthDeg, beamwidthDeg, steps = 24) {
+  const start = azimuthDeg - beamwidthDeg / 2;
+  const end = azimuthDeg + beamwidthDeg / 2;
+
+  const pts = [[centerLat, centerLng]]; // start at center
+
+  for (let i = 0; i <= steps; i++) {
+    const a = (start + (i / steps) * (end - start)) * (Math.PI / 180);
+
+    // In map coords: north = cos, east = sin
+    const north = Math.cos(a) * radiusMeters;
+    const east = Math.sin(a) * radiusMeters;
+
+    const [dLat, dLng] = metersToLatLngOffset(centerLat, north, east);
+    pts.push([centerLat + dLat, centerLng + dLng]);
+  }
+
+  pts.push([centerLat, centerLng]); // close
+  return pts;
+}
+
+function safeNumber(x, fallback = null) {
+  const n = Number(x);
+  return Number.isFinite(n) ? n : fallback;
+}
+
+
+
+
+
+
+
+
+
+
+
+//coverage loaD
+async function loadAndUseCoverage() {
+  try {
+    const response = await fetch("/api/hush/_search", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        size: 5000,
+        query: { match_all: {} }
+      })
+    });
+
+    if (!response.ok) {
+      const text = await response.text();
+      throw new Error(`ES error ${response.status}: ${text}`);
+    }
+
+    const jsonData = await response.json();
+    const records = (jsonData.hits?.hits || []).map(h => h._source);
+
+    // Reset ONLY coverage (don’t touch clusters)
+    operatorCoverageLayers.forEach(lg => lg.remove());
+    operatorCoverageLayers.clear();
+    operatorCoverageByBW.clear();
+
+    for (const r of records) {
+      // need at least A coords for sector center + B coords for radius
+      if (typeof r?.lat_a !== "number" || typeof r?.long_a !== "number") continue;
+      if (typeof r?.lat_b !== "number" || typeof r?.long_b !== "number") continue;
+
+      const operator = normalizeOperator(r.ow_name);
+      let color = operatorColors.get(operator);
+if (!color || typeof color !== "string" || !color.startsWith("#")) {
+  color = colorFromString(operator);
+  operatorColors.set(operator, color);
+}
+
+
+      if (!operatorCoverageLayers.has(operator)) {
+        const lg = L.layerGroup().addTo(map);
+        operatorCoverageLayers.set(operator, lg);
+      }
+      if (!operatorCoverageByBW.has(operator)) {
+        operatorCoverageByBW.set(operator, new Map());
+      }
+
+      const bw = Number(r.bw_khz);
+      const stop = nearestBWStopValue(bw);
+      if (stop == null) continue;
+
+      const byStop = operatorCoverageByBW.get(operator);
+      if (!byStop.has(stop)) byStop.set(stop, []);
+
+      const polyA = makeCoverageSector(r, "a", color);
+      if (polyA) byStop.get(stop).push(polyA);
+
+      const polyB = makeCoverageSector(r, "b", color);
+      if (polyB) byStop.get(stop).push(polyB);
+    }
+
+
+    // after the for-loop ends (right before applyBWFilterToCoverage)
+    console.log("Coverage operators:", operatorCoverageByBW.size);
+ console.log("Example coverage buckets:", Array.from(operatorCoverageByBW.entries())[0]);
+
+
+
+
+    // show first stop initially
+    applyBWFilterToCoverage(BW_STOPS[0]);
+    
+
+
+  } catch (err) {
+    console.error("Error loading COVERAGE data from Elasticsearch:", err);
+    
+
+  }
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+//lajerji
+
+function rebuildLinksLayer(records) {
+  linksLayer.clearLayers();
+
+  for (const r of records) {
+    if (typeof r?.lat_a !== "number" || typeof r?.long_a !== "number") continue;
+    if (typeof r?.lat_b !== "number" || typeof r?.long_b !== "number") continue;
+
+    const operator = normalizeOperator(r.ow_name);
+    const color = operatorColors.get(operator) || colorFromString(operator);
+    operatorColors.set(operator, color);
+
+    const line = [
+      [r.lat_a, r.long_a],
+      [r.lat_b, r.long_b],
+    ];
+
+    const polyline = L.polyline(line, {
+      color,
+      opacity: 0.6,
+      weight: 2,
+    });
+
+    linksLayer.addLayer(polyline);
+  }
+
+  // Add to map once (or keep only in layer control)
+  // linksLayer.addTo(map);
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+// za barve
+
+let operatorLayers = new Map();   // operator -> L.LayerGroup
+let operatorColors = new Map();   // operator -> color
+let operatorControlInstance = null;
+
+function normalizeOperator(name) {
+  const s = (name || "").toLowerCase();
+
+  if (s.includes("a1")) return "A1";
+  if (s.includes("telemach")) return "Telemach";
+  if (s.includes("telekom")) return "Telekom Slovenije";
+  if (s.includes("t-2") || s.includes("t2")) return "T-2";
+
+  return (name || "Unknown").trim();
+}
+
+// stable color from string
+function colorFromString(str) {
+  const base = (str || "Unknown");
+  let hash = 0;
+  for (let i = 0; i < base.length; i++) hash = base.charCodeAt(i) + ((hash << 5) - hash);
+  return COLORS[Math.abs(hash) % COLORS.length];
+}
+
+
+
+
+
+
+
+// BW filter za clusterje
+
+function applyBWFilterToClusters(stopValue) {
+  selectedBWStop = stopValue;
+
+  operatorLayers.forEach((clusterGroup, operator) => {
+    clusterGroup.clearLayers();
+
+    const byStop = operatorMarkersByBW.get(operator);
+    const list = byStop?.get(stopValue) || [];
+
+    if (list.length) clusterGroup.addLayers(list);
+  });
+}
+
+
+
+
+function applyBWFilterToCoverage(stopValue) {
+  operatorCoverageLayers.forEach((layerGroup, operator) => {
+    layerGroup.clearLayers();
+
+    const byStop = operatorCoverageByBW.get(operator);
+    const polys = byStop?.get(stopValue) || [];
+
+    polys.forEach(p => layerGroup.addLayer(p));
+  });
+}
+
+
+
+
+
+
+
+function placedCoordinates(coordinates){
+  console.log("Lat:", coordinates.lat);
+  console.log("Lng:", coordinates.lng);
+}
+
+
+
+
+
+
+
+
+
+
+
 let points = [];
 
 async function loadAndUseData() {
   try {
-    const response = await fetch('rf.json');
-    const jsonData = await response.json();
-    const records = jsonData.records;
-
-    // Map records to your points format
-    points = records.filter(record => record.ow_name?.toLowerCase().startsWith("radio"))
-    .map(record => ({
-      lat: record.lat_a,
-      lng: record.long_a,
-      owner: record.ow_name,
-      text: `<h3>${record.mw_name}</h3>
-             <b>Imetnik:</b> ${record.ow_name}<br>
-             <b>Širina rf kanala BW/KHz:</b> ${record.bw_khz}<br>
-             <b>Ime postaje A:</b> ${record.station_name_a}<br>
-             <b>ID postaje A:</b> ${record.station_id_a}<br>
-             <b>Polarizacija A:</b> ${record.ant1_polar_a}<br>
-             <b>Azimut snopa A [deg]:</b> ${record.ant1_azimut_a}<br>
-             <b>Elevacijski kot A [deg]:</b> ${record.ant1_tilt_a}<br>
-             <b>Centralna frekvenca A [F/MHz]:</b> ${record.tx_frequency_a}<br>
-             <b>Ime postaje B:</b> ${record.station_name_b}<br>
-             <b>ID postaje B:</b> ${record.station_id_b}<br>
-             <b>Polarizacija B:</b> ${record.ant1_polar_b}<br>
-             <b>Azimut snopa B [deg]:</b> ${record.ant1_azimut_b}<br>
-             <b>Elevacijski kot B [deg]:</b> ${record.ant1_tilt_b}<br>
-             <b>Centralna frekvenca B [F/MHz]:</b> ${record.tx_frequency_b}<br>`
-    }));
-
-    //console.log(points);
-    const color = stringToColor(points[0].owner);
-
-    const newIcon = L.divIcon({
-      className: "marker",
-      html: svgIcon.replace('fill="originalColor"', `fill="#731818ff"`),
-      // html: svgIcon.replace('fill="originalColor"', `fill="${color}"`),
-      iconSize: [30, 30],
-      iconAnchor: [12, 24],
-      popupAnchor: [7, -16],
-      
+    const response = await fetch("/api/hush/_search", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        size: 5000,
+        query: { match_all: {} }
+      })
     });
 
-      points.map(({ lat, lng, text }) => {
-      // create marker and add to map
-      var marker = L.marker([lat, lng], {
-        
-        icon: newIcon,
-        
-      }).addTo(map);
+    if (!response.ok) {
+      const text = await response.text();
+      throw new Error(`ES error ${response.status}: ${text}`);
+    }
 
-      // create popup, set contnet
+    const jsonData = await response.json();
+    const records = (jsonData.hits?.hits || []).map(h => h._source);
+    rebuildLinksLayer(records);
+
+// add layer control toggle once
+if (!linksControl) {
+  const overlayMaps = { "Povezave": linksLayer };
+  linksControl = L.control.layers(null, overlayMaps, { collapsed: false }).addTo(map);
+}
+
+    console.log("ES total records:", records.length);
+
+    // Reset old layers + caches
+    operatorLayers.forEach(lg => lg.remove());
+    operatorLayers.clear();
+    operatorColors.clear();
+    operatorMarkersByBW.clear(); 
+
+    points = records
+      .filter(r => typeof r?.lat_a === "number" && typeof r?.long_a === "number")
+      .map(r => ({
+        lat: r.lat_a,
+        lng: r.long_a,
+        owner: r.ow_name ?? "Unknown",
+        raw: r
+      }));
+
+    console.log("Points with coords:", points.length);
+    if (points.length === 0) return;
+
+    // Build markers grouped by operator AND by BW stop (bucketed)
+    for (const p of points) {
+      const r = p.raw;
+
+      const operator = normalizeOperator(r.ow_name);
+      const color = operatorColors.get(operator) || colorFromString(operator);
+      operatorColors.set(operator, color);
+
+      //  CLUSTER za skupine
+      if (!operatorLayers.has(operator)) {
+        const cluster = L.markerClusterGroup({
+          disableClusteringAtZoom: 13,
+          maxClusterRadius: 60,
+          spiderfyOnMaxZoom: true,
+          showCoverageOnHover: false,
+          zoomToBoundsOnClick: true
+        });
+
+        cluster.addTo(map); // visible by default
+        operatorLayers.set(operator, cluster);
+      }
+
+      const icon = L.divIcon({
+        className: "marker",
+        html: svgIcon.replace('fill="originalColor"', `fill="${color}"`),
+        iconSize: [30, 30],
+        iconAnchor: [12, 24],
+        popupAnchor: [7, -16],
+      });
+
+      const text = `<h3>${r.mw_name ?? "-"}</h3>
+        <b>Imetnik:</b> ${r.ow_name ?? "-"}<br>
+        <b>BW/KHz:</b> ${r.bw_khz ?? "-"}<br>
+        <b>Postaja A:</b> ${r.station_name_a ?? "-"} (${r.station_id_a ?? "-"})<br>
+        <b>Pol A:</b> ${r.ant1_polar_a ?? "-"} | <b>Az:</b> ${r.ant1_azimut_a ?? "-"} | <b>Tilt:</b> ${r.ant1_tilt_a ?? "-"}<br>
+        <b>Frekv A:</b> ${r.tx_frequency_a ?? "-"}<br>
+        <hr/>
+        <b>Postaja B:</b> ${r.station_name_b ?? "-"} (${r.station_id_b ?? "-"})<br>
+        <b>Pol B:</b> ${r.ant1_polar_b ?? "-"} | <b>Az:</b> ${r.ant1_azimut_b ?? "-"} | <b>Tilt:</b> ${r.ant1_tilt_b ?? "-"}<br>
+        <b>Frekv B:</b> ${r.tx_frequency_b ?? "-"}<br>`;
+
+      const marker = L.marker([p.lat, p.lng], { icon });
+
+
+      marker._bw = Number(r.bw_khz);
+      const stop = nearestBWStopValue(marker._bw);
+      marker._bwStop = stop;
+
       const popup = L.popup({
         pane: "fixed",
         className: "popup-fixed test",
         autoPan: false,
       }).setContent(text);
 
-  marker.bindPopup(popup).on("click", fitBoundsPadding);
-});
+      marker.bindPopup(popup).on("click", fitBoundsPadding);
 
-// remove all animation class when popupclose
-map.on("popupclose", function (e) {
-  removeAllAnimationClassFromMap();
-});
+ 
+      if (!operatorMarkersByBW.has(operator)) operatorMarkersByBW.set(operator, new Map());
+      const byStop = operatorMarkersByBW.get(operator);
+      if (!byStop.has(stop)) byStop.set(stop, []);
+      byStop.get(stop).push(marker);
 
-const line = [
-  [points[0].lat, points[0].lng],
-  [points[50].lat, points[50].lng],
-];
+    }
 
-// add polyline to map
-L.polyline(line, {
-  color: "black",
-  opacity: 0.7,
-  weight: 2,
-})
-  .addTo(map);
-    
-    
+    applyBWFilterToClusters(selectedBWStop);
+    applyBWFilterToClusters(BW_STOPS[0]);
+
+    // Build the checkbox UI
+    buildComboControl();
+
   } catch (err) {
-    console.error('Error loading data:', err);
+    console.error("Error loading data from Elasticsearch:", err);
   }
 }
 
-
 loadAndUseData();
+loadAndUseCoverage();
 
 //console.log(points);
+
+
+
+
+
+
+
+
+//SLIDER IN CHECKER
+
+
+let comboControl = null;
+
+function buildComboControl() {
+  // če že obstaja, ga odstrani
+  if (comboControl) {
+    map.removeControl(comboControl);
+    comboControl = null;
+  }
+
+  const operators = Array.from(operatorLayers.keys()).sort((a, b) => a.localeCompare(b));
+
+  comboControl = L.Control.extend({
+    options: { position: "bottomright" },
+
+    onAdd: function () {
+      const container = L.DomUtil.create("div", "bw-ops-control leaflet-control");
+      L.DomEvent.disableClickPropagation(container);
+
+      const opsHtml = operators.map(op => {
+        const color = operatorColors.get(op) || "#000";
+        return `
+          <label class="op">
+            <input type="checkbox" data-op="${op}" checked />
+            <span class="swatch" style="background:${color}"></span>
+            <span>${op}</span>
+          </label>
+        `;
+      }).join("");
+
+      container.innerHTML = `
+        <label>BW (kHz)</label>
+        <input
+          id="bwSlider"
+          type="range"
+          min="0"
+          max="1000"
+          step="1"
+          value="${BW_STOP_POS[0]}"
+        />
+        <div class="bw-ops-value">
+          Selected: <span id="bwSliderValue">${BW_STOPS[0]}</span>
+        </div>
+
+        <!-- ✅ Coverage toggle -->
+        <div class="cov-row" style="margin:8px 0 6px; display:flex; align-items:center; gap:8px;">
+          <input id="covToggle" type="checkbox" ${coverageEnabled ? "checked" : ""} />
+          <label for="covToggle" style="margin:0; font-size:12px; font-weight:600;">
+            Show coverage
+          </label>
+        </div>
+
+        <div class="ops-title">Operators</div>
+        <div class="btnrow">
+          <button type="button" id="opAll">All</button>
+          <button type="button" id="opNone">None</button>
+        </div>
+        <div class="ops-list">
+          ${opsHtml}
+        </div>
+      `;
+
+      setTimeout(() => {
+        const bwSlider = container.querySelector("#bwSlider");
+        const bwSliderValue = container.querySelector("#bwSliderValue");
+        const covToggle = container.querySelector("#covToggle");
+
+        // ✅ initial filter for both clusters + coverage
+        activeBWStop = BW_STOPS[0];
+        applyBWFilterToClusters(activeBWStop);
+        if (coverageEnabled) applyBWFilterToCoverage(activeBWStop);
+
+        // ✅ coverage toggle wiring
+        covToggle.addEventListener("change", () => {
+          setCoverageEnabled(covToggle.checked);
+        });
+
+        // slider
+        bwSlider.addEventListener("input", (e) => {
+          const raw = Number(e.target.value);
+          const snapped = snapToBWStop(raw);
+
+          bwSlider.value = snapped.pos;
+          bwSliderValue.textContent = snapped.value;
+
+          activeBWStop = snapped.value;
+          applyBWFilterToClusters(activeBWStop);
+          if (coverageEnabled) applyBWFilterToCoverage(activeBWStop);
+        });
+
+        // operator toggles
+        const allBtn = container.querySelector("#opAll");
+        const noneBtn = container.querySelector("#opNone");
+        const checkboxes = Array.from(container.querySelectorAll('input[type="checkbox"][data-op]'));
+
+        const setOpVisible = (op, visible) => {
+          const cluster = operatorLayers.get(op);
+          if (cluster) {
+            if (visible) cluster.addTo(map);
+            else cluster.remove();
+          }
+
+          const cov = operatorCoverageLayers.get(op);
+          if (cov) {
+            // ✅ respect coverageEnabled
+            if (visible && coverageEnabled) cov.addTo(map);
+            else cov.remove();
+          }
+        };
+
+        allBtn.addEventListener("click", () => {
+          checkboxes.forEach(cb => {
+            cb.checked = true;
+            setOpVisible(cb.dataset.op, true);
+          });
+
+          // re-apply current BW
+          applyBWFilterToClusters(activeBWStop);
+          if (coverageEnabled) applyBWFilterToCoverage(activeBWStop);
+        });
+
+        noneBtn.addEventListener("click", () => {
+          checkboxes.forEach(cb => {
+            cb.checked = false;
+            setOpVisible(cb.dataset.op, false);
+          });
+        });
+
+        checkboxes.forEach(cb => {
+          cb.addEventListener("change", () => {
+            setOpVisible(cb.dataset.op, cb.checked);
+
+            // re-apply current BW
+            applyBWFilterToClusters(activeBWStop);
+            if (coverageEnabled) applyBWFilterToCoverage(activeBWStop);
+          });
+        });
+
+      }, 0);
+
+      return container;
+    }
+  });
+
+  map.addControl(new comboControl());
+}
+
+
+
+
+
+
+
+
+
 
 
 
@@ -492,10 +1527,10 @@ const autocomplete = new Autocomplete("marker", {
     });
 
     // add marker to map
-    marker.addTo(map).bindPopup(display_name);
+    //marker.addTo(map).bindPopup(display_name);
 
     // set marker to coordinates
-    map.setView([cord[1], cord[0]], 8);
+    map.setView([cord[1], cord[0]], 18);
 
     // add class to marker
     L.DomUtil.addClass(marker._icon, "leaflet-marker-locate");
@@ -505,6 +1540,59 @@ const autocomplete = new Autocomplete("marker", {
   noResults: ({ currentValue, template }) =>
     template(`<li>No results found: "${currentValue}"</li>`),
 });
+
+
+
+
+// loadaj TOWERJE
+function loadSavedTowers() {
+  const towers = JSON.parse(localStorage.getItem("placedTowers") || "[]");
+  towers.forEach(t => {
+    L.marker([t.lat, t.lng]).addTo(map).bindPopup(`Saved tower<br>${t.lat.toFixed(6)}, ${t.lng.toFixed(6)}`);
+  });
+}
+loadSavedTowers();
+
+
+
+
+
+
+
+
+
+
+
+
+// da applay az afilereja in colors
+
+
+function applyFilters() {
+  if (!selectedBWStop) return;
+
+  for (const [op, data] of operatorData) {
+    const opEnabled = enabledOperators.has(op);
+
+    // rebuild cluster and coverage fast
+    data.cluster.clearLayers();
+    data.coverage.clearLayers();
+
+    if (!opEnabled) continue;
+
+    for (const item of data.items) {
+      const mStop = nearestBWStopValue(Number(item.bw));
+      if (mStop !== selectedBWStop) continue;
+
+      data.cluster.addLayer(item.marker);
+
+      // add coverage shapes too
+      if (item.covA) data.coverage.addLayer(item.covA);
+      if (item.covB) data.coverage.addLayer(item.covB);
+    }
+  }
+}
+
+
 
 
 
@@ -562,3 +1650,12 @@ fetch("si.json")
         });
 
   });
+
+
+
+  const overlayMaps = {
+  "Povezave": lines,
+};
+
+
+L.control.layers(null, overlayMaps, { collapsed: false }).addTo(map);
