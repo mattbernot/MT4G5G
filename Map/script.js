@@ -77,7 +77,7 @@ const svgIcon = `
 const COLORS = ['red', 'blue', 'green', 'purple', 'orange', 'yellow', 'pink'];
 
 function getFirstWord(str) {
-  return str.split('')[0] || str;
+  return str?.trim().split(/\s+/)[0] || '';
 }
 
 function stringToColor(str) {
@@ -96,6 +96,7 @@ function placedCoordinates(coordinates){
 
 
 let points = [];
+let lines = new L.FeatureGroup();
 
 async function loadAndUseData() {
   try {
@@ -108,6 +109,8 @@ async function loadAndUseData() {
     .map(record => ({
       lat: record.lat_a,
       lng: record.long_a,
+      lat_b: record.lat_b,
+      lng_b: record.long_b,
       owner: record.ow_name,
       id: record.mw_name,
       text: `<h3>${record.mw_name}</h3>
@@ -128,7 +131,7 @@ async function loadAndUseData() {
     }));
 
     //console.log(points);
-    const color = stringToColor(points[0].owner);
+    
 
 
    
@@ -137,6 +140,21 @@ async function loadAndUseData() {
   let markers = L.markerClusterGroup();
 
   for (let i = 0; i < points.length; i++) {
+    const color = stringToColor(points[i].owner);
+    for (let j = 0; j < points.length; j++) {
+      if(points[i].lat == points[j].lat_b && points[i].lng == points[j].lng_b){
+        const line = [
+          [points[i].lat, points[i].lng],
+          [points[j].lat, points[j].lng],
+           ];
+        const polyline = L.polyline(line, {
+        color,
+        opacity: 0.7,
+        weight: 2,
+        });
+        lines.addLayer(polyline);
+      }
+    }
 
     
     const newIcon = L.divIcon({
@@ -178,18 +196,6 @@ map.on("popupclose", function (e) {
 });
 */
 
-const line = [
-  [points[0].lat, points[0].lng],
-  [points[50].lat, points[50].lng],
-];
-
-// add polyline to map
-L.polyline(line, {
-  color: "black",
-  opacity: 0.7,
-  weight: 2,
-})
-  .addTo(map);
 
   const mediaQueryList = window.matchMedia("(min-width: 700px)");
 
@@ -630,3 +636,12 @@ map.on(L.Draw.Event.CREATED, function (event) {
 
   drawnItems.addLayer(layer);
 });
+
+//--------------------------------------------
+
+const overlayMaps = {
+  "Povezave": lines,
+};
+
+
+L.control.layers(null, overlayMaps, { collapsed: false }).addTo(map);
