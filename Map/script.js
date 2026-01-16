@@ -490,10 +490,9 @@ return L.polygon(latlngs, {
 
 
 // ================================
-// BW SLIDER (snapping + filtering)
+// BW SLIDER 
 // ================================
 
-// Your 15 points (duplicates allowed)
 const BW_POINTS = [
   500,
   28000, 28000,
@@ -505,10 +504,10 @@ const BW_POINTS = [
   500000
 ];
 
-// Unique sorted stops (duplicates removed)
+
 const BW_STOPS = Array.from(new Set(BW_POINTS)).sort((a, b) => a - b);
 
-// Build stop positions on a log scale mapped into 0..1000
+
 function buildStopPositions(stops) {
   const logMin = Math.log10(stops[0]);
   const logMax = Math.log10(stops[stops.length - 1]);
@@ -520,7 +519,7 @@ function buildStopPositions(stops) {
 
 const BW_STOP_POS = buildStopPositions(BW_STOPS);
 
-// Snap a slider value (0..1000) to nearest stop index/value/pos
+
 function snapToBWStop(sliderVal) {
   let bestIdx = 0;
   let bestDist = Infinity;
@@ -536,7 +535,7 @@ function snapToBWStop(sliderVal) {
   return { idx: bestIdx, value: BW_STOPS[bestIdx], pos: BW_STOP_POS[bestIdx] };
 }
 
-// Map any bw value to the nearest stop (used for "closest value" behavior)
+
 function nearestBWStopValue(bw) {
   if (typeof bw !== "number") return null;
 
@@ -661,7 +660,7 @@ function sectorLatLngs(centerLat, centerLng, radiusMeters, azimuthDeg, beamwidth
   for (let i = 0; i <= steps; i++) {
     const a = (start + (i / steps) * (end - start)) * (Math.PI / 180);
 
-    // In map coords: north = cos, east = sin
+
     const north = Math.cos(a) * radiusMeters;
     const east = Math.sin(a) * radiusMeters;
 
@@ -708,13 +707,12 @@ async function loadAndUseCoverage() {
     const jsonData = await response.json();
     const records = (jsonData.hits?.hits || []).map(h => h._source);
 
-    // Reset ONLY coverage (don’t touch clusters)
+    // Reset ONLY 
     operatorCoverageLayers.forEach(lg => lg.remove());
     operatorCoverageLayers.clear();
     operatorCoverageByBW.clear();
 
     for (const r of records) {
-      // need at least A coords for sector center + B coords for radius
       if (typeof r?.lat_a !== "number" || typeof r?.long_a !== "number") continue;
       if (typeof r?.lat_b !== "number" || typeof r?.long_b !== "number") continue;
 
@@ -749,14 +747,13 @@ if (!color || typeof color !== "string" || !color.startsWith("#")) {
     }
 
 
-    // after the for-loop ends (right before applyBWFilterToCoverage)
+   
     console.log("Coverage operators:", operatorCoverageByBW.size);
  console.log("Example coverage buckets:", Array.from(operatorCoverageByBW.entries())[0]);
 
 
 
 
-    // show first stop initially
     applyBWFilterToCoverage(BW_STOPS[0]);
     
 
@@ -990,7 +987,7 @@ if (!linksControl) {
           zoomToBoundsOnClick: true
         });
 
-        cluster.addTo(map); // visible by default
+        cluster.addTo(map); 
         operatorLayers.set(operator, cluster);
       }
 
@@ -1039,7 +1036,6 @@ if (!linksControl) {
     applyBWFilterToClusters(selectedBWStop);
     applyBWFilterToClusters(BW_STOPS[0]);
 
-    // Build the checkbox UI
     buildComboControl();
 
   } catch (err) {
@@ -1128,17 +1124,16 @@ function buildComboControl() {
         const bwSliderValue = container.querySelector("#bwSliderValue");
         const covToggle = container.querySelector("#covToggle");
 
-        // ✅ initial filter for both clusters + coverage
+
         activeBWStop = BW_STOPS[0];
         applyBWFilterToClusters(activeBWStop);
         if (coverageEnabled) applyBWFilterToCoverage(activeBWStop);
 
-        // ✅ coverage toggle wiring
         covToggle.addEventListener("change", () => {
           setCoverageEnabled(covToggle.checked);
         });
 
-        // slider
+
         bwSlider.addEventListener("input", (e) => {
           const raw = Number(e.target.value);
           const snapped = snapToBWStop(raw);
@@ -1165,7 +1160,7 @@ function buildComboControl() {
 
           const cov = operatorCoverageLayers.get(op);
           if (cov) {
-            // ✅ respect coverageEnabled
+        
             if (visible && coverageEnabled) cov.addTo(map);
             else cov.remove();
           }

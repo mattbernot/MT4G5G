@@ -11,7 +11,18 @@ const towerIcon = `
   
 `;
 
-var placedCoordinates = null;
+window.placedCoordinates = function ({ lat, lng }) {
+  const towers = JSON.parse(localStorage.getItem("placedTowers") || "[]");
+
+  towers.push({
+    lat,
+    lng,
+    bw_khz: DEFAULT_USER_BW,
+    source: "user"
+  });
+
+  localStorage.setItem("placedTowers", JSON.stringify(towers));
+};
 
 const newIcon = L.divIcon({
       html: towerIcon,
