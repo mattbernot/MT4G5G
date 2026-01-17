@@ -1,16 +1,46 @@
-# React + Vite
+# Sistem za prikaz radiofrekvenc
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+Sistem za prikaz radijskih postaj, njihovih frekvenc, pokritosti in povezav.
 
-Currently, two official plugins are available:
+## Zemljevid
+Spletna stran, ki prikazuje zemljevid Slovenije, na katerem so postavljene radijske postaje. <br>
+S klikom na postajo v obliki stolpa, ne nam odpre stranski zavihek s podatki:
+- Ime postaje
+- ID postaje
+- Imetnik         
+- Polarizacija
+- Širina radiofrekvenčnega kanala BW/KHz
+- Azimut snopa
+- Elevacijski kot
+- Centralna frekvenca
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+Imamo možnost prikaza pokristosti posameznega stolpa in fiksnih povezav med stolpi.
 
-## React Compiler
+S klikom na gumb z ikono lupine v levem zgornjem kotu iščemo kraj, v katerem se nahajajo radijske postaje.
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+S klikom na gumb lokacije lahko dodamo novo radijsko postajo, ki jo postavimo na zemljevid.
 
-## Expanding the ESLint configuration
+## Filtriranje
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+Podatke lahko filtriramo na širino radiofrekvenčnega kanala, izbiramo pa lahko tudi med imetniki radijskih postaj.
+
+## Podatkovna baza
+Podatki se shranjujejo na podatkovno bazo ElasticSearch, s katere se tudi berejo. Za lažjo vizualizacijo uporablja vmesnik Kibana.
+
+## Uporabljene tehnologije
+- JavaScript
+- HTML
+- CSS
+- React
+- Leaflet
+- Nominatim
+
+## Zahteve
+
+- React
+- ElasticSearch
+- Kibana
+
+## Avtorja
+[Matic Bernot](https://github.com/mattbernot)
+[Klemen Javeršek](https://github.com/klemen39)
